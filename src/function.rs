@@ -10,6 +10,7 @@ use {
   Function::*,
 };
 
+#[allow(clippy::arbitrary_source_item_ordering)]
 pub(crate) enum Function {
   Nullary(fn(Context) -> FunctionResult),
   Unary(fn(Context, &str) -> FunctionResult),
@@ -87,8 +88,10 @@ pub(crate) fn get(name: &str) -> Option<Function> {
     "path_exists" => Unary(path_exists),
     "prepend" => Binary(prepend),
     "quote" => Unary(quote),
+    "read" => Unary(read),
     "replace" => Ternary(replace),
     "replace_regex" => Ternary(replace_regex),
+    "require" => Unary(require),
     "semver_matches" => Binary(semver_matches),
     "sha256" => Unary(sha256),
     "sha256_file" => Unary(sha256_file),
@@ -98,6 +101,7 @@ pub(crate) fn get(name: &str) -> Option<Function> {
     "snakecase" => Unary(snakecase),
     "source_directory" => Nullary(source_directory),
     "source_file" => Nullary(source_file),
+    "style" => Unary(style),
     "titlecase" => Unary(titlecase),
     "trim" => Unary(trim),
     "trim_end" => Unary(trim_end),
@@ -109,6 +113,7 @@ pub(crate) fn get(name: &str) -> Option<Function> {
     "uppercamelcase" => Unary(uppercamelcase),
     "uppercase" => Unary(uppercase),
     "uuid" => Nullary(uuid),
+    "which" => Unary(which),
     "without_extension" => Unary(without_extension),
     _ => return None,
   };
@@ -196,10 +201,6 @@ fn capitalize(_context: Context, s: &str) -> FunctionResult {
 }
 
 fn choose(_context: Context, n: &str, alphabet: &str) -> FunctionResult {
-  if alphabet.is_empty() {
-    return Err("empty alphabet".into());
-  }
-
   let mut chars = HashSet::<char>::with_capacity(alphabet.len());
 
   for c in alphabet.chars() {
@@ -216,7 +217,13 @@ fn choose(_context: Context, n: &str, alphabet: &str) -> FunctionResult {
 
   let mut rng = thread_rng();
 
-  Ok((0..n).map(|_| alphabet.choose(&mut rng).unwrap()).collect())
+  (0..n)
+    .map(|_| {
+      alphabet
+        .choose(&mut rng)
+        .ok_or_else(|| "empty alphabet".to_string())
+    })
+    .collect()
 }
 
 fn clean(_context: Context, path: &str) -> FunctionResult {
@@ -261,6 +268,13 @@ fn encode_uri_component(_context: Context, s: &str) -> FunctionResult {
   Ok(percent_encoding::utf8_percent_encode(s, &PERCENT_ENCODE).to_string())
 }
 
+fn env(context: Context, key: &str, default: Option<&str>) -> FunctionResult {
+  match default {
+    Some(val) => env_var_or_default(context, key, val),
+    None => env_var(context, key),
+  }
+}
+
 fn env_var(context: Context, key: &str) -> FunctionResult {
   use std::env::VarError::*;
 
@@ -290,13 +304,6 @@ fn env_var_or_default(context: Context, key: &str, default: &str) -> FunctionRes
       "environment variable `{key}` not unicode: {os_string:?}"
     )),
     Ok(value) => Ok(value),
-  }
-}
-
-fn env(context: Context, key: &str, default: Option<&str>) -> FunctionResult {
-  match default {
-    Some(val) => env_var_or_default(context, key, val),
-    None => env_var(context, key),
   }
 }
 
@@ -445,50 +452,23 @@ fn lowercase(_context: Context, s: &str) -> FunctionResult {
 }
 
 fn module_directory(context: Context) -> FunctionResult {
-  context
-    .evaluator
-    .context
-    .search
-    .justfile
-    .parent()
-    .unwrap()
-    .join(&context.evaluator.context.module.source)
-    .parent()
-    .unwrap()
-    .to_str()
-    .map(str::to_owned)
-    .ok_or_else(|| {
-      format!(
-        "Module directory is not valid unicode: {}",
-        context
-          .evaluator
-          .context
-          .module
-          .source
-          .parent()
-          .unwrap()
-          .display(),
-      )
-    })
+  let module_directory = context.evaluator.context.module.source.parent().unwrap();
+  module_directory.to_str().map(str::to_owned).ok_or_else(|| {
+    format!(
+      "Module directory is not valid unicode: {}",
+      module_directory.display(),
+    )
+  })
 }
 
 fn module_file(context: Context) -> FunctionResult {
-  context
-    .evaluator
-    .context
-    .search
-    .justfile
-    .parent()
-    .unwrap()
-    .join(&context.evaluator.context.module.source)
-    .to_str()
-    .map(str::to_owned)
-    .ok_or_else(|| {
-      format!(
-        "Module file path is not valid unicode: {}",
-        context.evaluator.context.module.source.display(),
-      )
-    })
+  let module_file = &context.evaluator.context.module.source;
+  module_file.to_str().map(str::to_owned).ok_or_else(|| {
+    format!(
+      "Module file path is not valid unicode: {}",
+      module_file.display(),
+    )
+  })
 }
 
 fn num_cpus(_context: Context) -> FunctionResult {
@@ -527,8 +507,17 @@ fn quote(_context: Context, s: &str) -> FunctionResult {
   Ok(format!("'{}'", s.replace('\'', "'\\''")))
 }
 
+fn read(context: Context, filename: &str) -> FunctionResult {
+  fs::read_to_string(context.evaluator.context.working_directory().join(filename))
+    .map_err(|err| format!("I/O error reading `{filename}`: {err}"))
+}
+
 fn replace(_context: Context, s: &str, from: &str, to: &str) -> FunctionResult {
   Ok(s.replace(from, to))
+}
+
+fn require(context: Context, name: &str) -> FunctionResult {
+  crate::which(context, name)?.ok_or_else(|| format!("could not find executable `{name}`"))
 }
 
 fn replace_regex(_context: Context, s: &str, regex: &str, replacement: &str) -> FunctionResult {
@@ -623,6 +612,20 @@ fn source_file(context: Context) -> FunctionResult {
     })
 }
 
+fn style(context: Context, s: &str) -> FunctionResult {
+  match s {
+    "command" => Ok(
+      Color::always()
+        .command(context.evaluator.context.config.command_color)
+        .prefix()
+        .to_string(),
+    ),
+    "error" => Ok(Color::always().error().prefix().to_string()),
+    "warning" => Ok(Color::always().warning().prefix().to_string()),
+    _ => Err(format!("unknown style: `{s}`")),
+  }
+}
+
 fn titlecase(_context: Context, s: &str) -> FunctionResult {
   Ok(s.to_title_case())
 }
@@ -665,6 +668,10 @@ fn uppercase(_context: Context, s: &str) -> FunctionResult {
 
 fn uuid(_context: Context) -> FunctionResult {
   Ok(uuid::Uuid::new_v4().to_string())
+}
+
+fn which(context: Context, name: &str) -> FunctionResult {
+  Ok(crate::which(context, name)?.unwrap_or_default())
 }
 
 fn without_extension(_context: Context, path: &str) -> FunctionResult {

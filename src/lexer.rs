@@ -27,12 +27,12 @@ pub(crate) struct Lexer<'src> {
   recipe_body_pending: bool,
   /// Source text
   src: &'src str,
-  /// Tokens
-  tokens: Vec<Token<'src>>,
   /// Current token end
   token_end: Position,
   /// Current token start
   token_start: Position,
+  /// Tokens
+  tokens: Vec<Token<'src>>,
 }
 
 impl<'src> Lexer<'src> {
@@ -259,7 +259,7 @@ impl<'src> Lexer<'src> {
 
   /// True if `text` could be an identifier
   pub(crate) fn is_identifier(text: &str) -> bool {
-    if !text.chars().next().map_or(false, Self::is_identifier_start) {
+    if !text.chars().next().is_some_and(Self::is_identifier_start) {
       return false;
     }
 
@@ -475,7 +475,7 @@ impl<'src> Lexer<'src> {
     match start {
       ' ' | '\t' => self.lex_whitespace(),
       '!' if self.rest().starts_with("!include") => Err(self.error(Include)),
-      '!' => self.lex_digraph('!', '=', BangEquals),
+      '!' => self.lex_choices('!', &[('=', BangEquals), ('~', BangTilde)], None),
       '#' => self.lex_comment(),
       '$' => self.lex_single(Dollar),
       '&' => self.lex_digraph('&', '&', AmpersandAmpersand),
@@ -486,7 +486,11 @@ impl<'src> Lexer<'src> {
       ',' => self.lex_single(Comma),
       '/' => self.lex_single(Slash),
       ':' => self.lex_colon(),
-      '=' => self.lex_choices('=', &[('=', EqualsEquals), ('~', EqualsTilde)], Equals),
+      '=' => self.lex_choices(
+        '=',
+        &[('=', EqualsEquals), ('~', EqualsTilde)],
+        Some(Equals),
+      ),
       '?' => self.lex_single(QuestionMark),
       '@' => self.lex_single(At),
       '[' => self.lex_delimiter(BracketL),
@@ -496,11 +500,12 @@ impl<'src> Lexer<'src> {
       ']' => self.lex_delimiter(BracketR),
       '`' | '"' | '\'' => self.lex_string(),
       '{' => self.lex_delimiter(BraceL),
+      '|' => self.lex_digraph('|', '|', BarBar),
       '}' => self.lex_delimiter(BraceR),
       _ if Self::is_identifier_start(start) => self.lex_identifier(),
       _ => {
         self.advance()?;
-        Err(self.error(UnknownStartOfToken))
+        Err(self.error(UnknownStartOfToken { start }))
       }
     }
   }
@@ -535,10 +540,10 @@ impl<'src> Lexer<'src> {
   /// Lex token while in recipe body
   fn lex_body(&mut self) -> CompileResult<'src> {
     enum Terminator {
+      EndOfFile,
+      Interpolation,
       Newline,
       NewlineCarriageReturn,
-      Interpolation,
-      EndOfFile,
     }
 
     use Terminator::*;
@@ -617,7 +622,7 @@ impl<'src> Lexer<'src> {
     &mut self,
     first: char,
     choices: &[(char, TokenKind)],
-    otherwise: TokenKind,
+    otherwise: Option<TokenKind>,
   ) -> CompileResult<'src> {
     self.presume(first)?;
 
@@ -628,7 +633,24 @@ impl<'src> Lexer<'src> {
       }
     }
 
-    self.token(otherwise);
+    if let Some(token) = otherwise {
+      self.token(token);
+    } else {
+      // Emit an unspecified token to consume the current character,
+      self.token(Unspecified);
+
+      let expected = choices.iter().map(|choice| choice.0).collect();
+
+      if self.at_eof() {
+        return Err(self.error(UnexpectedEndOfToken { expected }));
+      }
+
+      // …and advance past another character,
+      self.advance()?;
+
+      // …so that the error we produce highlights the unexpected character.
+      return Err(self.error(UnexpectedCharacter { expected }));
+    }
 
     Ok(())
   }
@@ -692,14 +714,18 @@ impl<'src> Lexer<'src> {
       self.token(Unspecified);
 
       if self.at_eof() {
-        return Err(self.error(UnexpectedEndOfToken { expected: right }));
+        return Err(self.error(UnexpectedEndOfToken {
+          expected: vec![right],
+        }));
       }
 
       // …and advance past another character,
       self.advance()?;
 
       // …so that the error we produce highlights the unexpected character.
-      Err(self.error(UnexpectedCharacter { expected: right }))
+      Err(self.error(UnexpectedCharacter {
+        expected: vec![right],
+      }))
     }
   }
 
@@ -948,6 +974,8 @@ mod tests {
       Asterisk => "*",
       At => "@",
       BangEquals => "!=",
+      BangTilde => "!~",
+      BarBar => "||",
       BraceL => "{",
       BraceR => "}",
       BracketL => "[",
@@ -2093,7 +2121,7 @@ mod tests {
     line:   0,
     column: 0,
     width:  1,
-    kind:   UnknownStartOfToken,
+    kind:   UnknownStartOfToken { start: '%'},
   }
 
   error! {
@@ -2154,7 +2182,7 @@ mod tests {
     line:   0,
     column: 0,
     width:  1,
-    kind:   UnknownStartOfToken,
+    kind:   UnknownStartOfToken{ start: '-'},
   }
 
   error! {
@@ -2164,7 +2192,7 @@ mod tests {
     line:   0,
     column: 0,
     width:  1,
-    kind:   UnknownStartOfToken,
+    kind:   UnknownStartOfToken { start: '0' },
   }
 
   error! {
@@ -2234,7 +2262,7 @@ mod tests {
     line:   0,
     column: 1,
     width:  1,
-    kind:   UnknownStartOfToken,
+    kind:   UnknownStartOfToken { start: '%'},
   }
 
   error! {
@@ -2259,9 +2287,10 @@ mod tests {
     column: 1,
     width:  0,
     kind:   UnexpectedEndOfToken {
-      expected: '&',
+      expected: vec!['&'],
     },
   }
+
   error! {
     name:   ampersand_unexpected,
     input:  "&%",
@@ -2270,7 +2299,19 @@ mod tests {
     column: 1,
     width:  1,
     kind:   UnexpectedCharacter {
-      expected: '&',
+      expected: vec!['&'],
+    },
+  }
+
+  error! {
+    name:   bang_eof,
+    input:  "!",
+    offset: 1,
+    line:   0,
+    column: 1,
+    width:  0,
+    kind:   UnexpectedEndOfToken {
+      expected: vec!['=', '~'],
     },
   }
 
@@ -2292,7 +2333,7 @@ mod tests {
       }
     );
     assert_matches!(&*compile_error.kind,
-        Internal { ref message }
+        Internal { message }
         if message == "Lexer presumed character `-`"
     );
 

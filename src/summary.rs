@@ -80,31 +80,31 @@ pub struct Recipe {
   pub aliases: Vec<String>,
   pub dependencies: Vec<Dependency>,
   pub lines: Vec<Line>,
+  pub parameters: Vec<Parameter>,
   pub private: bool,
   pub quiet: bool,
   pub shebang: bool,
-  pub parameters: Vec<Parameter>,
 }
 
 impl Recipe {
   fn new(recipe: &full::Recipe, aliases: Vec<String>) -> Self {
     Self {
-      private: recipe.private,
-      shebang: recipe.shebang,
-      quiet: recipe.quiet,
+      aliases,
       dependencies: recipe.dependencies.iter().map(Dependency::new).collect(),
       lines: recipe.body.iter().map(Line::new).collect(),
       parameters: recipe.parameters.iter().map(Parameter::new).collect(),
-      aliases,
+      private: recipe.private,
+      quiet: recipe.quiet,
+      shebang: recipe.shebang,
     }
   }
 }
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug, Clone)]
 pub struct Parameter {
+  pub default: Option<Expression>,
   pub kind: ParameterKind,
   pub name: String,
-  pub default: Option<Expression>,
 }
 
 impl Parameter {
@@ -119,8 +119,8 @@ impl Parameter {
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
 pub enum ParameterKind {
-  Singular,
   Plus,
+  Singular,
   Star,
 }
 
@@ -149,8 +149,8 @@ impl Line {
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug, Clone)]
 pub enum Fragment {
-  Text { text: String },
   Expression { expression: Expression },
+  Text { text: String },
 }
 
 impl Fragment {
@@ -183,6 +183,10 @@ impl Assignment {
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug, Clone)]
 pub enum Expression {
+  And {
+    lhs: Box<Expression>,
+    rhs: Box<Expression>,
+  },
   Assert {
     condition: Condition,
     error: Box<Expression>,
@@ -209,6 +213,10 @@ pub enum Expression {
     lhs: Option<Box<Expression>>,
     rhs: Box<Expression>,
   },
+  Or {
+    lhs: Box<Expression>,
+    rhs: Box<Expression>,
+  },
   String {
     text: String,
   },
@@ -221,6 +229,10 @@ impl Expression {
   fn new(expression: &full::Expression) -> Self {
     use full::Expression::*;
     match expression {
+      And { lhs, rhs } => Self::And {
+        lhs: Self::new(lhs).into(),
+        rhs: Self::new(rhs).into(),
+      },
       Assert {
         condition: full::Condition { lhs, rhs, operator },
         error,
@@ -250,11 +262,9 @@ impl Expression {
           ..
         } => {
           let mut arguments = Vec::new();
-
           if let Some(b) = opt_b.as_ref() {
             arguments.push(Self::new(b));
           }
-
           arguments.push(Self::new(a));
           Self::Call {
             name: name.lexeme().to_owned(),
@@ -308,10 +318,6 @@ impl Expression {
         lhs: Self::new(lhs).into(),
         rhs: Self::new(rhs).into(),
       },
-      Join { lhs, rhs } => Self::Join {
-        lhs: lhs.as_ref().map(|lhs| Self::new(lhs).into()),
-        rhs: Self::new(rhs).into(),
-      },
       Conditional {
         condition: full::Condition { lhs, rhs, operator },
         otherwise,
@@ -323,13 +329,21 @@ impl Expression {
         rhs: Self::new(rhs).into(),
         then: Self::new(then).into(),
       },
+      Group { contents } => Self::new(contents),
+      Join { lhs, rhs } => Self::Join {
+        lhs: lhs.as_ref().map(|lhs| Self::new(lhs).into()),
+        rhs: Self::new(rhs).into(),
+      },
+      Or { lhs, rhs } => Self::Or {
+        lhs: Self::new(lhs).into(),
+        rhs: Self::new(rhs).into(),
+      },
       StringLiteral { string_literal } => Self::String {
         text: string_literal.cooked.clone(),
       },
       Variable { name, .. } => Self::Variable {
         name: name.lexeme().to_owned(),
       },
-      Group { contents } => Self::new(contents),
     }
   }
 }
@@ -337,8 +351,8 @@ impl Expression {
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug, Clone)]
 pub struct Condition {
   lhs: Box<Expression>,
-  rhs: Box<Expression>,
   operator: ConditionalOperator,
+  rhs: Box<Expression>,
 }
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug, Clone)]
@@ -346,6 +360,7 @@ pub enum ConditionalOperator {
   Equality,
   Inequality,
   RegexMatch,
+  RegexMismatch,
 }
 
 impl ConditionalOperator {
@@ -354,14 +369,15 @@ impl ConditionalOperator {
       full::ConditionalOperator::Equality => Self::Equality,
       full::ConditionalOperator::Inequality => Self::Inequality,
       full::ConditionalOperator::RegexMatch => Self::RegexMatch,
+      full::ConditionalOperator::RegexMismatch => Self::RegexMismatch,
     }
   }
 }
 
 #[derive(Eq, PartialEq, Hash, Ord, PartialOrd, Debug, Clone)]
 pub struct Dependency {
-  pub recipe: String,
   pub arguments: Vec<Expression>,
+  pub recipe: String,
 }
 
 impl Dependency {

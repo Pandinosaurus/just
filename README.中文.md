@@ -144,13 +144,13 @@ list:
   <tr>
     <td><a href="https://nixos.org/download.html#download-nix">Various</a></td>
     <td><a href="https://nixos.org/nix/">Nix</a></td>
-    <td><a href="https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/just/default.nix">just</a></td>
+    <td><a href="https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/ju/just/package.nix">just</a></td>
     <td><code>nix-env -iA nixpkgs.just</code></td>
   </tr>
   <tr>
     <td><a href="https://nixos.org/nixos/">NixOS</a></td>
     <td><a href="https://nixos.org/nix/">Nix</a></td>
-    <td><a href="https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/just/default.nix">just</a></td>
+    <td><a href="https://github.com/NixOS/nixpkgs/blob/master/pkgs/by-name/ju/just/package.nix">just</a></td>
     <td><code>nix-env -iA nixos.just</code></td>
   </tr>
   <tr>
@@ -218,6 +218,22 @@ list:
     <td>
       <code>asdf plugin add just</code><br>
       <code>asdf install just &lt;version&gt;</code>
+    </td>
+  </tr>
+  <tr>
+    <td><a href="https://packaging.python.org/tutorials/installing-packages">Various</a></td>
+    <td><a href="https://pypi.org">PyPI</a></td>
+    <td><a href="https://pypi.org/project/rust-just">rust-just</a></td>
+    <td>
+      <code>pipx install rust-just</code><br>
+    </td>
+  </tr>
+  <tr>
+    <td><a href="https://docs.npmjs.com/packages-and-modules/getting-packages-from-the-registry">Various</a></td>
+    <td><a href="https://www.npmjs.com">npm</a></td>
+    <td><a href="https://www.npmjs.com/package/rust-just">rust-just</a></td>
+    <td>
+      <code>npm install -g rust-just</code><br>
     </td>
   </tr>
   <tr>
@@ -1180,11 +1196,11 @@ The executable is at: /bin/just
 - `replace_regex(s, regex, replacement)` - 将 `s` 中所有的 `regex` 替换为 `replacement`。正则表达式由 [Rust `regex` 包](https://docs.rs/regex/latest/regex/) 提供。参见 [语法文档](https://docs.rs/regex/latest/regex/#syntax) 以了解使用示例。
 - `trim(s)` - 去掉 `s` 的首尾空格。
 - `trim_end(s)` - 去掉 `s` 的尾部空格。
-- `trim_end_match(s, pat)` - 删除与 `pat` 匹配的 `s` 的后缀。
-- `trim_end_matches(s, pat)` - 反复删除与 `pat` 匹配的 `s` 的后缀。
+- `trim_end_match(s, substr)` - 删除与 `substr` 匹配的 `s` 的后缀。
+- `trim_end_matches(s, substr)` - 反复删除与 `substr` 匹配的 `s` 的后缀。
 - `trim_start(s)` - 去掉 `s` 的首部空格。
-- `trim_start_match(s, pat)` - 删除与 `pat` 匹配的 `s` 的前缀。
-- `trim_start_matches(s, pat)` - 反复删除与 `pat` 匹配的 `s` 的前缀。
+- `trim_start_match(s, substr)` - 删除与 `substr` 匹配的 `s` 的前缀。
+- `trim_start_matches(s, substr)` - 反复删除与 `substr` 匹配的 `s` 的前缀。
 
 #### 大小写转换
 

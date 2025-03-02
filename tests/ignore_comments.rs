@@ -79,7 +79,6 @@ fn continuations_with_echo_comments_true() {
         echo something-useful
     ",
     )
-    .stdout("")
     .stderr("# comment lines can be continued echo something-useful\n")
     .run();
 }
@@ -125,7 +124,7 @@ fn comments_still_must_be_parsable_when_ignored() {
     )
     .stderr(
       "
-        error: Expected '}}', '(', '+', or '/', but found identifier
+        error: Expected '&&', '||', '}}', '(', '+', or '/', but found identifier
          ——▶ justfile:4:12
           │
         4 │   # {{ foo bar }}

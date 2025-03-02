@@ -21,9 +21,8 @@ impl Compiler {
       let tokens = Lexer::lex(relative, src)?;
       let mut ast = Parser::parse(
         current.file_depth,
-        &current.path,
         &current.import_offsets,
-        &current.namepath,
+        current.namepath.as_ref(),
         &tokens,
         &current.working_directory,
       )?;
@@ -214,14 +213,7 @@ impl Compiler {
   #[cfg(test)]
   pub(crate) fn test_compile(src: &str) -> CompileResult<Justfile> {
     let tokens = Lexer::test_lex(src)?;
-    let ast = Parser::parse(
-      0,
-      &PathBuf::new(),
-      &[],
-      &Namepath::default(),
-      &tokens,
-      &PathBuf::new(),
-    )?;
+    let ast = Parser::parse(0, &[], None, &tokens, &PathBuf::new())?;
     let root = PathBuf::from("justfile");
     let mut asts: HashMap<PathBuf, Ast> = HashMap::new();
     asts.insert(root.clone(), ast);

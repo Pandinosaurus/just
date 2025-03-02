@@ -2,8 +2,8 @@ use super::*;
 
 #[derive(Debug, PartialEq)]
 pub(crate) struct CompileError<'src> {
-  pub(crate) token: Token<'src>,
   pub(crate) kind: Box<CompileErrorKind<'src>>,
+  pub(crate) token: Token<'src>,
 }
 
 impl<'src> CompileError<'src> {
@@ -54,7 +54,7 @@ impl Display for CompileError<'_> {
         }
       }
       BacktickShebang => write!(f, "Backticks may not start with `#!`"),
-      CircularRecipeDependency { recipe, ref circle } => {
+      CircularRecipeDependency { recipe, circle } => {
         if circle.len() == 2 {
           write!(f, "Recipe `{recipe}` depends on itself")
         } else {
@@ -65,10 +65,7 @@ impl Display for CompileError<'_> {
           )
         }
       }
-      CircularVariableDependency {
-        variable,
-        ref circle,
-      } => {
+      CircularVariableDependency { variable, circle } => {
         if circle.len() == 2 {
           write!(f, "Variable `{variable}` is defined in terms of itself")
         } else {
@@ -121,6 +118,10 @@ impl Display for CompileError<'_> {
       DuplicateUnexport { variable } => {
         write!(f, "Variable `{variable}` is unexported multiple times")
       }
+      ExitMessageAndNoExitMessageAttribute { recipe } => write!(
+        f,
+        "Recipe `{recipe}` has both `[exit-message]` and `[no-exit-message]` attributes"
+      ),
       ExpectedKeyword { expected, found } => {
         let expected = List::or_ticked(expected);
         if found.kind == TokenKind::Identifier {
@@ -161,7 +162,7 @@ impl Display for CompileError<'_> {
         ShowWhitespace(expected),
         ShowWhitespace(found)
       ),
-      Internal { ref message } => write!(
+      Internal { message } => write!(
         f,
         "Internal error, this may indicate a bug in just: {message}\n\
            consider filing an issue: https://github.com/casey/just/issues/new"
@@ -203,6 +204,10 @@ impl Display for CompileError<'_> {
            consist of tabs or spaces, but not both",
         ShowWhitespace(whitespace)
       ),
+      NoCdAndWorkingDirectoryAttribute { recipe } => write!(
+        f,
+        "Recipe `{recipe}` has both `[no-cd]` and `[working-directory]` attributes"
+      ),
       ParameterFollowsVariadicParameter { parameter } => {
         write!(f, "Parameter `{parameter}` follows variadic parameter")
       }
@@ -242,17 +247,22 @@ impl Display for CompileError<'_> {
         "Non-default parameter `{parameter}` follows default parameter"
       ),
       UndefinedVariable { variable } => write!(f, "Variable `{variable}` not defined"),
-      UnexpectedCharacter { expected } => write!(f, "Expected character `{expected}`"),
+      UnexpectedCharacter { expected } => {
+        write!(f, "Expected character {}", List::or_ticked(expected))
+      }
       UnexpectedClosingDelimiter { close } => {
         write!(f, "Unexpected closing delimiter `{}`", close.close())
       }
       UnexpectedEndOfToken { expected } => {
-        write!(f, "Expected character `{expected}` but found end-of-file")
+        write!(
+          f,
+          "Expected character {} but found end-of-file",
+          List::or_ticked(expected),
+        )
       }
-      UnexpectedToken {
-        ref expected,
-        found,
-      } => write!(f, "Expected {}, but found {found}", List::or(expected)),
+      UnexpectedToken { expected, found } => {
+        write!(f, "Expected {}, but found {found}", List::or(expected))
+      }
       UnicodeEscapeCharacter { character } => {
         write!(f, "expected hex digit [0-9A-Fa-f] but found `{character}`")
       }
@@ -281,7 +291,13 @@ impl Display for CompileError<'_> {
       }
       UnknownFunction { function } => write!(f, "Call to unknown function `{function}`"),
       UnknownSetting { setting } => write!(f, "Unknown setting `{setting}`"),
-      UnknownStartOfToken => write!(f, "Unknown start of token:"),
+      UnknownStartOfToken { start } => {
+        write!(f, "Unknown start of token '{start}'")?;
+        if !start.is_ascii_graphic() {
+          write!(f, " (U+{:04X})", *start as u32)?;
+        }
+        Ok(())
+      }
       UnpairedCarriageReturn => write!(f, "Unpaired carriage return"),
       UnterminatedBacktick => write!(f, "Unterminated backtick"),
       UnterminatedInterpolation => write!(f, "Unterminated interpolation"),

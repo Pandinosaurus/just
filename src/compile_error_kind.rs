@@ -23,12 +23,6 @@ pub(crate) enum CompileErrorKind<'src> {
     min: usize,
     max: usize,
   },
-  Redefinition {
-    first: usize,
-    first_type: &'static str,
-    name: &'src str,
-    second_type: &'static str,
-  },
   DuplicateAttribute {
     attribute: &'src str,
     first: usize,
@@ -41,11 +35,14 @@ pub(crate) enum CompileErrorKind<'src> {
     setting: &'src str,
     first: usize,
   },
+  DuplicateUnexport {
+    variable: &'src str,
+  },
   DuplicateVariable {
     variable: &'src str,
   },
-  DuplicateUnexport {
-    variable: &'src str,
+  ExitMessageAndNoExitMessageAttribute {
+    recipe: &'src str,
   },
   ExpectedKeyword {
     expected: Vec<Keyword>,
@@ -87,10 +84,19 @@ pub(crate) enum CompileErrorKind<'src> {
   MixedLeadingWhitespace {
     whitespace: &'src str,
   },
+  NoCdAndWorkingDirectoryAttribute {
+    recipe: &'src str,
+  },
   ParameterFollowsVariadicParameter {
     parameter: &'src str,
   },
   ParsingRecursionDepthExceeded,
+  Redefinition {
+    first: usize,
+    first_type: &'static str,
+    name: &'src str,
+    second_type: &'static str,
+  },
   RequiredParameterFollowsDefaultParameter {
     parameter: &'src str,
   },
@@ -104,13 +110,13 @@ pub(crate) enum CompileErrorKind<'src> {
     variable: &'src str,
   },
   UnexpectedCharacter {
-    expected: char,
+    expected: Vec<char>,
   },
   UnexpectedClosingDelimiter {
     close: Delimiter,
   },
   UnexpectedEndOfToken {
-    expected: char,
+    expected: Vec<char>,
   },
   UnexpectedToken {
     expected: Vec<TokenKind>,
@@ -147,7 +153,9 @@ pub(crate) enum CompileErrorKind<'src> {
   UnknownSetting {
     setting: &'src str,
   },
-  UnknownStartOfToken,
+  UnknownStartOfToken {
+    start: char,
+  },
   UnpairedCarriageReturn,
   UnterminatedBacktick,
   UnterminatedInterpolation,

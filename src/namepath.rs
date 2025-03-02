@@ -1,6 +1,6 @@
 use super::*;
 
-#[derive(Default, Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(crate) struct Namepath<'src>(Vec<Name<'src>>);
 
 impl<'src> Namepath<'src> {
@@ -16,7 +16,7 @@ impl<'src> Namepath<'src> {
   }
 }
 
-impl<'src> Display for Namepath<'src> {
+impl Display for Namepath<'_> {
   fn fmt(&self, f: &mut Formatter) -> fmt::Result {
     for (i, name) in self.0.iter().enumerate() {
       if i > 0 {
@@ -28,7 +28,13 @@ impl<'src> Display for Namepath<'src> {
   }
 }
 
-impl<'src> Serialize for Namepath<'src> {
+impl<'src> From<Name<'src>> for Namepath<'src> {
+  fn from(name: Name<'src>) -> Self {
+    Self(vec![name])
+  }
+}
+
+impl Serialize for Namepath<'_> {
   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
   where
     S: Serializer,
